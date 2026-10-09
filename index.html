@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Mole Crew</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Grandstander:wght@700;800&family=Nunito:wght@600;700&display=swap">
+<style>
+  /* Layout: full-screen 3D cave, a small wordmark top-left, a help card bottom-left, the hand on top.
+     DECISION (Claude): a single dark look (it's a cave), so no light theme. */
+  :root {
+    color-scheme: dark;
+    --cave: #110c12;      /* matches the 3D background */
+    --panel: #1f1720e6;   /* help card */
+    --ink: #f3e9dc;       /* text */
+    --ink-quiet: #b9a99a;
+    --hat: #f4c430;       /* mining-hat yellow: the one accent */
+    --hat-deep: #b8860b;
+    --font-display: "Grandstander", "Comic Sans MS", system-ui, sans-serif;
+    --font-body: "Nunito", system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  html, body { height: 100%; margin: 0; overflow: hidden; background: var(--cave); color: var(--ink); font-family: var(--font-body); }
+  #view { display: block; width: 100%; height: 100%; cursor: none; }
+
+  .wordmark {
+    position: fixed; top: calc(14px + env(safe-area-inset-top, 0px)); left: 18px;
+    font-family: var(--font-display); font-weight: 800; font-size: 26px; letter-spacing: 0.01em;
+    color: var(--hat); text-shadow: 0 2px 0 #3a2a10, 0 0 18px #f4c43033;
+    pointer-events: none; user-select: none;
+  }
+  .wordmark small { display: block; font-family: var(--font-body); font-size: 11px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-quiet); text-shadow: none; margin-top: -2px; }
+
+  #help {
+    position: fixed; left: 16px; bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+    max-width: min(330px, calc(100vw - 32px));
+    background: var(--panel); border: 1px solid #3b2d38; border-radius: 12px;
+    padding: 12px 14px; font-size: 13px; line-height: 1.45; color: var(--ink);
+    display: grid; gap: 4px; pointer-events: none; user-select: none;
+  }
+  #help b { color: var(--hat); font-weight: 700; }
+  #help .quiet { color: var(--ink-quiet); font-size: 12px; margin-top: 2px; }
+
+  #mute {
+    position: fixed; top: calc(62px + env(safe-area-inset-top, 0px)); left: 18px;
+    font-size: 12px; font-weight: 700; color: var(--ink-quiet); pointer-events: none;
+  }
+  /* Narrator captions: a soft pill at the bottom centre, fading in and out. */
+  #caption {
+    position: fixed; left: 50%; bottom: calc(22px + env(safe-area-inset-bottom, 0px));
+    transform: translate(-50%, 8px); max-width: min(560px, calc(100vw - 32px));
+    padding: 10px 18px; border-radius: 999px; background: #1f1720ee; border: 1px solid #4a3a46;
+    font-family: var(--font-display); font-weight: 700; font-size: 20px; line-height: 1.3; text-align: center;
+    color: var(--ink); opacity: 0; pointer-events: none; transition: opacity 250ms, transform 250ms;
+  }
+  #caption.on { opacity: 1; transform: translate(-50%, 0); }
+  @media (max-width: 760px) { #caption { font-size: 16px; bottom: 140px; border-radius: 16px; } }
+  #debug {
+    position: fixed; top: 14px; right: 16px; margin: 0;
+    font: 12px/1.4 ui-monospace, Consolas, monospace; color: #9fe39f;
+    background: #000a; padding: 8px 10px; border-radius: 6px; white-space: pre; pointer-events: none;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* The hand. data-mode picks which drawing shows and how it is tinted. */
+  #hand { position: fixed; left: 0; top: 0; width: 72px; height: 72px; pointer-events: none; z-index: 10; will-change: transform; }
+  #hand .art { width: 72px; height: 72px; transform-origin: 50% 60%; }
+  #hand svg { position: absolute; inset: 0; width: 72px; height: 72px; filter: drop-shadow(0 3px 2px #0009); }
+  #hand .palm { display: none; }
+  #hand[data-mode="slap"] .point { display: none; }
+  #hand[data-mode="slap"] .palm { display: block; }
+  #hand[data-mode="none"] { opacity: 0.55; }
+  #hand .tip { opacity: 0; transition: opacity 120ms; }
+  #hand[data-mode="paint"] .tip-paint { opacity: 1; }
+  #hand[data-mode="erase"] .tip-erase { opacity: 1; }
+  .slap-anim { animation: slap 240ms ease-out; }
+  .dab-anim { animation: dab 140ms ease-out; }
+  @keyframes slap { 0% { transform: rotate(0) } 35% { transform: rotate(-32deg) scale(1.12) } 70% { transform: rotate(14deg) scale(0.92) } 100% { transform: rotate(0) } }
+  @keyframes dab { 0% { transform: scale(1) } 45% { transform: scale(0.84) translateY(4px) } 100% { transform: scale(1) } }
+  @media (prefers-reduced-motion: reduce) { .slap-anim, .dab-anim { animation-duration: 1ms; } }
+  .tip-paint { animation: glowpulse 1.2s ease-in-out infinite; transform-origin: 22px 6px; }
+  @keyframes glowpulse { 50% { transform: scale(1.25) } }
+</style>
+<!-- An import map tells the browser where `import ... from 'three'` should load from. -->
+<script type="importmap">
+  { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.min.js" } }
+</script>
+</head>
+<body>
+<canvas id="view" aria-label="Mole Crew cave"></canvas>
+
+<div class="wordmark">Mole Crew<small>draft 8</small></div>
+<div id="mute" hidden>Sound off (M)</div>
+
+<div id="help">
+  <div><b>Drag a box over rock</b> to mark it for digging. Bright blocks can be dug now; outlined ones wait for a tunnel to reach them.</div>
+  <div><b>Start a box on a mark</b> (or right-drag) to unmark.</div>
+  <div><b>Tap a mole</b> to hurry it up: it works faster for a bit.</div>
+  <div><b>Rooms near the burrow get a lever.</b> Tap it, then tap a picture to choose the room. Roads join the rooms. Somewhere in the rock is a portal…</div>
+  <div><b>Visitors grow up</b> when they find the two rooms they need. A thought bubble shows a room they're missing.</div>
+  <div><b>Twinkling blocks hide treasure.</b> Dig them out and the moles put them on show around the burrow.</div>
+  <div class="quiet">WASD or arrows to look around · scroll to zoom · M sound · C captions · H hides this · N new cave</div>
+</div>
+
+<pre id="debug" hidden></pre>
+<div id="caption" aria-live="polite"></div>
+
+<div id="hand" data-mode="none" hidden>
+  <div class="art">
+    <!-- Pointing glove (paint / erase). Fingertip at (22, 6) is the hotspot. -->
+    <svg class="point" viewBox="0 0 72 72" aria-hidden="true">
+      <g stroke="#3a2a10" stroke-width="2.5" stroke-linejoin="round" fill="#f4c430">
+        <rect x="15" y="3" width="14" height="34" rx="7"/>
+        <rect x="27" y="22" width="12" height="18" rx="6"/>
+        <rect x="37" y="25" width="11" height="17" rx="5.5"/>
+        <rect x="46" y="29" width="10" height="15" rx="5"/>
+        <rect x="13" y="30" width="44" height="28" rx="13"/>
+        <rect x="5" y="34" width="14" height="10" rx="5" transform="rotate(-25 12 39)"/>
+        <rect x="16" y="54" width="38" height="12" rx="4" fill="#b8860b"/>
+      </g>
+      <circle class="tip tip-paint" cx="22" cy="6" r="6" fill="#ffd84a" stroke="#fff6c8" stroke-width="2"/>
+      <circle class="tip tip-erase" cx="22" cy="6" r="6" fill="none" stroke="#ffffff" stroke-width="2.5" stroke-dasharray="3 3"/>
+    </svg>
+    <!-- Open palm (slap). Palm centre at (36, 40) is the hotspot. -->
+    <svg class="palm" viewBox="0 0 72 72" aria-hidden="true">
+      <g stroke="#3a2a10" stroke-width="2.5" stroke-linejoin="round" fill="#f4c430">
+        <rect x="17" y="8" width="10" height="28" rx="5" transform="rotate(-12 22 22)"/>
+        <rect x="27" y="3" width="10" height="30" rx="5"/>
+        <rect x="38" y="4" width="10" height="30" rx="5" transform="rotate(6 43 19)"/>
+        <rect x="48" y="10" width="9" height="26" rx="4.5" transform="rotate(16 52 23)"/>
+        <rect x="4" y="34" width="22" height="10" rx="5" transform="rotate(-35 15 39)"/>
+        <rect x="16" y="26" width="42" height="30" rx="14"/>
+        <rect x="19" y="53" width="36" height="12" rx="4" fill="#b8860b"/>
+      </g>
+    </svg>
+  </div>
+</div>
+
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
